@@ -1,0 +1,761 @@
+---
+title: "Estudio de expresión diferencial en la regulación génica dentro del tracto digestivo de _Homo sapiens_ en relación a su microbiota."
+author: "Carrillo Cindy & Gomez Daniela"
+date: "Genómica Funcional. Semestre 2021-1"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+# {r setup, include=FALSE} ...
+#Indica que sea codigo de R, que es en relacion al setup global/general de los chunks. "include=FLASE" previene que el output de los codigos se imprima en el archivo de output, pero, el chunk se corre y sus outputs pueden ser lamados y/o utilizados en otros chunks; se debe indicar lo contrario en los chunks que se busca esten en el archivo de output.
+
+knitr::opts_chunk$set(echo = TRUE)
+#Se accede a la funcion "opts_chunk" de "knitr", esta funcion permite indicar las opciones de los chunks, esto con la sub-accion "set". Aqui, la unica accion que se indica es que los chunks aparezcan en el archivo de output. Si se busca lo contrario, se debe indicar en el chunk.
+
+```
+
+# Introducción
+
+Primero los términos microbiota y microbioma van estar relacionados en este proyecto, por lo tanto, es importante definirlos. La microbiota es el conjunto de microorganismos presentes mientras que el microbioma es el conjunto de genes de los microorganismos en una muestra biológica(Marchesi y Ravel, 2015). 
+Los cambios en la microbiota pueden afectar la compleja red de señalización, lo que influye en el microbioma que conduce a la salud o la enfermedad. Los cambios en la microbiota son significativos porque se ha estimado que las células del hospedero y la microbiota son casi el mismo número en un individuo, la mayoría de las poblaciones de microorganismos se concentran en el intestino, la piel y la cavidad bucal. El microbioma contiene más de 100 veces el número de genes del genoma humano y hay aproximadamente 10 veces más genes en cada uno de nuestros microbiomas que en cada uno de nosotros, codifica la mayor fuente de potencial de antígenos que el sistema inmunológico, enriquece el metabolismo de glicanos, aminoácidos y xenobióticos. También es responsable de la síntesis de vitaminas, isoprenoides y otros nutrientes, por ello el humano posee un metabolismo que representa la fusión de atributos microbianos y humanos. Se han realizado estudios de cómo el microbioma participa en la cicatrización de heridas de la mucosa intestinal en ratones, se induce la expresión del receptor 1 del péptido formilo(FPR1) y NADPH oxidasa neutrofílica(NOX2) que causa una disminución del oxígeno, por tanto da oportunidad de colonización de bacterias anaeróbicas, que estimula la proliferación y migración de enterocitos adyacentes a las heridas colónicas mediada por FPR1 y señalización redox dependiente de NOX1 específica de células epiteliales intestinales, lo que conduce a la cicatrización(Thomas et al., 2017). 
+
+Aquí buscaremos utilizar información referente al transcriptoma del hospedero (*H. sapiens*) para responder cuáles son los genes que participan en los niveles (colon transverso, íleon y recto) en el tracto intestinal y verlo de forma dinámica. Los resultados nos darán una idea de cuales son los genes que deberían expresarse típicamente en cada compartimento del tracto intestinal. Se utilizan muestras de estos tres niveles dado que nos permiten seguir una vía de digestión desde el intestino delgado (íleon) hasta el último nivel del tracto digestivo (recto). Se busca encontrar una asociación entre esta expresión de genes y la microbiota intestinal, por ello se hace uso del recurso HMP, a pesar de no contar coon los datos necesarios para ver la asocioación hospedero-microbiota se genera en el presente trabajo un análisis de expresión diferencial en relación al hospedero y un código funcional para la creación de redes de microbiota.
+
+
+
+# Obtención de datos
+## _HMP: Human microbiome proyect_.
+El Proyecto de Microbioma Humano, HMP por sus siglas en inglés, es una iniciativa del National Institute of Health (NIH) que tiene como finalidad recabar y compartir información referente a la microbiota del ser humano. Es un recurso de uso libre y abierto, está conformado por dos proyectos HMP1 (NIH Human Microbiome Proyect) e iHMP (Integrative Human Microbiome Proyect).
+
+## _Almacenar los datos y extraer metadatos_.
+Ya que tenemos los archivos correspondientes a las matrices de abundancias seleccionadas en la página oficial de _HMP_, procedemos a generar funciones que nos permitan almacenar su información con una estructura más útil para el análisis posterior. Debido a que las funciones generadas son interactivas y los archivos de tipo *markdown* no lo son estas funciones deben correrse de manera independiente antes de ejecutar `knit()` en el archivo.No puede realizarse la solicitud de información vía `readline()` dado este inpedimento del tipo de archivo. En el chunk que corresponde a estas funciones se incluye una sección que guarda sus *outputs* como objetos de **R** en la dirección del proyecto en que se está utilizando el presente doscumento (o, si no se está trabajando en un proyecto de **R**, los objetos se guardan la dirección en que se encuentra en archivo **.Rmd**). 
+
+Primero creamos vectores vacíos para guardar los distintos datos relacionados a nuestras muestras, los metadatos. En este caso, consideramos relevantes a: el ID de la muestra, su procedencia (colon transverso, ileum o recto), el sexo del individuo del que fue colectada (fenemino o masculino) y el número de muestra que es de cada lugar de procedencia.
+A continuación, creamos dos funciones que nos permitirán ordenar y almacenar la información de cada muestra de manera automatizada. Las funciones son: `muestra_1()` y `muestras()`. Con la primera obtenemos la información de la muestra que aparecerá en la primer posición en el data.frame tanto de los metadatos como el que corresponde a la base de datos. Con la segunda, se anexa información a los objetos creados y/o modificados al correr `muestra_1()`. En las funciones, las modificaciones y asignaciones de objetos se aplican con "` <<- `" dado que de este modo sí se generan las modificaciones en el entorno global y no solo en la función. A continuación, una explicación más detallada de cada una:
+
+### muestra_1() :
+Esta función puede dividirse, esencialmente, en seis pasos, cada uno -y sus subniveles- se encuentran indicados entre paréntsisis en el código. Esta función no tiene argumentos.
+
+1. **Seleccionar manualmente el archivo correspondiente a la muestra.** Para ello, se llama a las funciones `read.table()` y `file.choose()`; con la primera podemos cargar el archivo de tipo ".tbl" (tabla) en el entorno de la sesión de R y, con la segunda, desplegamos el buscador de archivos para acceder al archivo de la muestra. Se indican los argumentos *header* como TRUE  y *sep* para esecificar las características de la tabla. Conserva los nombres de columnas y separa a las mismas por el separador "_" (espacio libre).
+2. **Renombrar las columnas de la base de datos.** Los datos se encuentran almacenados en el objeto *m1*, la primer columna correponde a los genes evaluados y la segunda a su abundancia en la muestra. Se indica con la funcion `names()`, primero se accede a ellos y posteriormente se reasignan valores; en este caso, la primer columna se llama *gene_name* y la segunda tiene le nombre de la muestra. Se accede a este segundo nombre mediante la función `names()` y los corchetes, dado que el *output* de `names()` es un vector de caracteres con los nombres de las columnas, podemos acceder al nombre de la columna que tiene el ID de la muestra -en la posición 2- vía corchetes.
+3. **Comenzar a almacenar metadatos, el ID de muestra.** Se almacena en el objeto *muestra* el ID que se ha indicado para la muestra primera de modo que los datos coincidan en ambas bases. Se accede al ID del mismo modo que en el paso anterior.
+4. **Obtener y almacenar metadatos, la procedencia de la muestra.** Éstos no se almacenan de manera automática, se solicita infrmación al usuario de modo que los metadatos del ID almacenado en el paso anterior coincidan con la correcta información de la muestra.
+Para obtener la información, se llama la función `readline()` y su argumento *prompt*; esto manda a la consola el mensaje citado en el argumento y no continúa la función hasta que el usuario dé un *input*. Se crea y utiliza el objeto *.start* para indicar al usuario que se iniciará a preguntar información sobre la muestra; en este objeto se lee en *prompt* un mensaje al usuario, mismo que deberá indicar ENTER para continuar al llenado de metadatos.
+Para almacenar la información correcta, se indican las opciones al usuario en el mensaje en consola; de modo que solo se guarde información referente a la pregunta enviada a consola, se utiliza un ciclo *if-else* donde solo los *input*'s que coincidan con las opciones ofrecidas permitirán que la función continúe. Para evaluar la respuesta del usuario, ésta se almacena en el objeto *.from* y es éste el que se evalúa.
+En el ciclo, si los *input*'s coinciden, se anexa información al objeto *procedencia*. Se agrega información dependiendo de la respuesta ingresada, cada posile respuesta aceptada corresponde a una zona evaluada; se anexa la información mediante corchetes y asignación (4.1) y para las respuestas no aplicables se envía un mensaje de ERROR.
+5. **Obtener y almacenar metadatos, el sexo del individuo del que fue tomada la muestra.** Esta sección de la función se ejecuta de igual manera que la anteior, las modificaciones son el objeto en que se almacena el *input* del usuario (.sex), la pregunta en consola y sus posibles respuestas. En este caso solo existen dos respuestas concordantes y, por tanto, el ciclo *if-else* es más corto. La información, en este caso, se almacena en el objeto *sexo* y en la posición correspondiente a la muestra.
+6. **Obtener y almacenar metadatos, el número de la muestra (por grupo).** Nuevamente se llama a la función `readline()`, en este caso es una nueva pregunta y no se utiliza un ciclo *if-ese* para evaluar el *input*. Se solicita al usuario un número correspondiente a la "réplica" de la muestra ingresada, dado que con `readine()` se obtienen objetos de tipo caracter, el objeto en que se ha almacenado la respuesta (*num.*) se transforma a clase numéroca. El objeto de tipo numérico se procede a guardar en un nuevo objeto, *.num* (secc. 6.2); finalmente, se almacena este número en el objeto *numero* en la posición correspondiente.
+
+```{r muestra_1(), eval=FALSE, echo=TRUE, message=FALSE}
+## Codigo interactivo. Debe correrse en consola previo al markdown ##
+
+# Los vectores vacios para almacenar metadatos:
+muestra <- c()
+procedencia <- c()
+sexo <- c()
+numero <- c()
+
+# La función, definida por el usuario:
+muestra_1 <- function(){
+  m1 <<- read.table(file.choose(), header = T, sep = "")   #(1)
+  names(m1) <<- c("gene_name", names(m1)[2])   #(2)
+  
+  muestra[1] <<- names(m1)[2]   #(3)
+
+  #(4) :
+  .start <- readline(prompt = "Procederemos a obtener la informacion.")
+  #(4.1) :
+  from. <- readline(prompt = "La muestra procede de ileum (I), recto (R) o colon (C) ?")
+if(from. == "I" | from. == "i"){    #(4.1.1)
+  procedencia[1] <<- "ileum" 
+}else if(from. == "R" | from. == "r"){    #(4.1.2)
+  procedencia[1] <<- "recto" 
+}else if(from. == "C" | from. == "c"){    #(4.1.3)
+  procedencia[1] <<- "colonT" 
+}else{
+  print("ERROR")    #(4.1.4)
+}
+
+  #(5):
+  sex. <- readline(prompt = "La muestra procede de un especimen macho (M) o hembra (H) ?")
+if(sex. == "M" | sex. == "m"){    #(5.1)
+  sexo[1] <<- "macho"
+}else if (sex. == "H" | sex. == "h"){    #(5.2)
+  sexo[1] <<- "hembra"
+}else{
+  print("ERROR")    #(5.3)
+}
+
+  num. <- readline(prompt = "Cual es el numero de muestra ?")   #(6)
+ .num <- as.numeric(num.)   #(6.1)
+ numero[1] <<- .num    #(6.2)
+}
+
+# Ejecución:
+muestra_1()
+
+# Guardar el objeto en el ordenador:
+save(m1, file = "m1.Rdata")
+
+```
+
+### muestras() :
+Esta función cuenta con el argumento *i*, mismo que es de utilidad para utilizarla en un ciclo (secc. Ejecución). Su sintaxis es semejante a la de la función `muestra_1()` en los pasos 1, 3, 4, 5 y 6; la diferencia es el argumento *i*, indica la posición en que guarda la información dentro de los vectores correspondientes. A continuación, solo se explicará ampliamente el paso 2 dado que los demás ya se encuentran plenamente explicados con anterioridad.
+
+2. **Añadir información, crear el data.frame.** En esta sección se llama a la función `cbind()` que pemite anexar columnas a un data.frame/matriz/data.set, en este caso, anexamos al objeto *m1* la columna correspondiente a las abundancias en la muestra ingresada en la sección 1. Posteriormente (2.1), se indica el nombre de la muestra como nombre de esta nueva columna; para ello, se llama nuevamente a `names()` pero se indica a la posición qiue coincidirá con a muestra agregada. Para que la posición del nombre sea correcta, se indica entre corchetes "*i* + 1", el "+ 1" es indispensable dado que ya se habría generado el primer registro y el ciclo aumenta de 1 en 1 valor, se requiere de avanzar una posición más para no sobreescribir y almacenar mal los IDs de las muestras. Se escribe el nombre al acceder a él del mismo modo que en la función anterior, con corchetes y la función `names()`.
+
+Para ejectutar esta función, se requiere de previamente correr a la función `muestra_1()` y de contar con el objeto *n* que corresponde al número de muestras totales del estudio. La ejecución requiere de un ciclo *for(i in vector)*, en este se repite la función para cada muestra en el ordenador, por ello se indica y utiliza a *n*.
+
+```{r muestras(), eval=FALSE, echo=TRUE, message=FALSE}
+## Codigo interactivo. Debe correrse en consola previo al markdown ##
+
+# La función, definida por el usuario:
+load("m1.Rdata") #cargar el objeto m1, outpt de muestras_1()
+muestras <- function(i){
+  m <<- read.table(file.choose(), header = T, sep = "") #(1)
+  m1 <<- cbind(m1, m[ ,2]) #(2)
+  names(m1)[i+1] <<- names(m)[2] #(2.1)
+  
+  muestra[i] <<- names(m)[2] #(3)
+  
+  #(4) :
+  .start <- readline(prompt = "Procederemos a obtener la informacion.") 
+  #(4.1) :
+  from. <- readline(prompt = "La muestra procede de ileum (I), recto (R) o colon (C) ?")
+  if(from. == "I" | from. == "i"){ #(4.1.1)
+    procedencia[i] <<- "ileum" 
+  }else if(from. == "R" | from. == "r"){ #(4.1.2)
+    procedencia[i] <<- "recto" 
+  }else if(from. == "C" | from. == "c"){ #(4.1.3)
+    procedencia[i] <<- "colonT" 
+  }else{
+    print("ERROR") #(4.1.4)
+  }
+  
+  #(5) :
+  sex. <- readline(prompt = "La muestra procede de un especimen macho (M) o hembra (H) ?")
+  if(sex. == "M" | sex. == "m"){ #(5.1)
+    sexo[i] <<- "macho"
+  }else if (sex. == "H" | sex. == "h"){ #(5.2)
+    sexo[i] <<- "hembra"
+  }else{
+    print("ERROR") #(5.3)
+  }
+  
+  num. <- readline(prompt = "Cual es el numero de la muestra ?") #(6)
+  .num <- as.numeric(num.) #(6.1)
+  numero[i] <<- .num #(6.2)
+}
+
+# Ejecución:
+n <- 12#numero de muestras totales
+for(i in 2:n){
+  muestras(i)
+}
+
+# Guardar el output en el ordenador:
+save(muestra, file = "muestra.Rdata")
+save(procedencia, file = "procedencia.Rdata")
+save(sexo, file = "sexo.Rdata")
+save(numero, file = "numero.Rdata")
+save(m1, file = "m1.Rdata") #nuevo objeto "m1"
+
+```
+
+## _Crear los data.frames de la base de datos y los metadatos_.
+### **_La base de datos_ :**
+Lo primero es cargar al entorno el objeto *m1* que fue el *output* de la función `muestas()`. Para generar un objeto que contega esta información, se almacena el *output* de las funciones `muestra_1()` y `muestras()` en un nuevo objeto. El *output* es el objeto *m1*, se escribe su información en el objeto *base_datos*. El *output* aparecerá como una ventana *pop-up* con la base de datos.
+
+### **_Los metadatos_ :**
+Previo a ejecutar el código, se cargan al entorno los objetos que corresponden a los vectores que formarán el *data.frame* de los metadatos. Para generar el archivo que tendrá esta información se requiere de generar un data.frame con los vectores vacíos generados con anterioridad: *muestra*, *procedencia*, *sexo* y *numero*. Para ello, se llama a la función **data.frame**; sus argumentos son la información a utilizar para formar el arreglo de datos, en este caso, los vectores. La información se almacena en el objeto *metadatos*.El *output* aparecerá como una ventana *pop-up* con el *data.frame* de los metadatos.
+
+```{r create dataframes, echo=TRUE, message=TRUE }
+# La base de datos:
+load("m1.Rdata") #cargar el objeto m1, outpt de muestras()
+base_datos <- m1
+View(base_datos) #ver el objeto en una pestaña nueva, opcional
+
+# Los metadatos:
+load("muestra.Rdata")
+load("procedencia.Rdata")
+load("sexo.Rdata")
+load("numero.Rdata")
+metadatos <- data.frame(muestra, procedencia, sexo, numero)
+View(metadatos) #ver el objeto en una pestaña nueva, opcional
+
+```
+
+# El análisis de expresión diferencial.
+Este tipo de análisis resulta útil para fines del proyecto debido a que se busca conocer si existe variación en la expresión génica entre las distintas zonas del tracto digestivo. Al conocer la variación en la expresión de los genes evaluados, podemos conocer cómo es que varía su regulación; podemos conocer y cuantificar esta variación vía el análisis de expresión diferencial. Este análisis utilizado con un modelo que consiedre a la procedencia de la muestra puede permitir contestar a la pregunta de investigación e inclusive, otras preguntas, por ejemplo, si es que varía la expresión -y qué tanto- entre machos y hembras.
+
+### _Instalar las librerías necesarias_.
+```{r DESeq installation, eval=FALSE, echo=TRUE, message=FALSE, warning=FALSE}
+# El manager de bioconductor:
+#quietly = TRUE para que no se envíe mensajes a la consola
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install() #instala la dependencia
+
+# La libreria DESeq2:
+BiocManager::install("DESeq2") 
+
+#si no cuentas con estos paquetes, cambia a: eval = TRUE
+```
+
+## _Ajustar los datos_.
+La función `DESeq()` puede trabajar con variedad de tipos de datos (formatos): archivos abundancias de transcritos, una matriz de conteos de abundancias (archivos con los que trabajamos en el presente proyecto), archivos de tipo HTSeq-count y/o objetos de tipo *SummarizedExperiment* (objetos que pueden almacenarse en objetos "*.R*"). El preprocesado de muestras depende totalmente del tipo de archivo y el tipo de experimento, en el presente trabajo se utilizan matrices que se encuentran hasta el último punto de procesamiento. Nuestras muestras de conteos ya han sido previamente evaluadas (checadas, cortadas y limpiadas) respecto a su calidad, alineadas a un genoma de referencia (*H. sapiens*) vía pseudoalineadores, ya se ha reaalizado el conteo de *reads* para cada gen indicado en la matriz y se han extraído estos conteos como abundancias. Son los archivos que contienen estas abundancias los que se han utilizado en este trabajo, conforman nuestros datos (objeto *base_datos*).
+Estos datos, no las muestras, requieren un preprocesado para poder ser utilizados como *input* de las funciones en **DESeq2**. Primero, se requiere de un objeto de tipo *matrix* para utilizar la función `DESeqDataSetFromMatrix()` que nos permite tener un objeto de tipo *DESeq* para el posterior análisis de expresión diferencial. La matriz debe tener como nombres de columnas los IDs de las muestras y como nombres de los renglones a los genes. De no encontrarse en esta confifuración, la función no se podrá ejecutar y tendremos un error asociado al conteo de renglones y columnas en los objetos que se toman como *input* de los argumentos en `DESeqDataSetFromMatrix()`. El preprocesado de la base de datos consta de dos pasos, indicados entre paréntsis en el código:
+
+1. **Generar la matriz**. La información se almacena en el objeto *matrix_data*. Contiene la información correspondiente a la base de datos generada anteriormente, ahora es un array de tipo *matrix*. Se elimina la primer columna de la base de datos, esto dado que la matriz debe tener los nombres de los genes no en una columna sino como nombres de los renglones. De conservar esta columna, nuevamente la función no se ejecuta.
+
+2. **Nombrar los renglones de la matriz**. Esta modificación nos permite mantener la información y en la estructura requerida para la función que se utilizará en la siguiente sección. Se llama a la función `rownames()` para acceder a los nombres de los renglones de la matriz y poder reasignar sus valores con "`<-`", el argumento de la función es entonces *matrix_data*. Los valores a asignar son los nombres de los genes, para mantener su orden se toman los valores almacenados en la columna "*gene_name*" de la base de datos; accedemos a ellos vía el accesor "`$`".
+
+El preprocesado de los metadatos es esencialmente diferente, en este caso no se requiere de un objeto tip *matrix*, la función puede ejecutarse si mantenemos el objeto que corresponde a los metadatos como de clase *data.frame*. Requiere de la misma modificación respecto al nombre de renglones y se asigna de igual modo a como se encuentra explicado en el paso **2** del preprocesado de la base de datos.
+
+```{r dataframes to matrices, echo=TRUE, message=TRUE, results='hide'}
+# Transformar la base de datos a una matriz:
+matrix_data <- as.matrix(base_datos[ , -1]) #(1)
+rownames(matrix_data) <- base_datos$gene_name #(2)
+
+# Renombrar los renglones del data.frame de metadatos:
+metadata <- metadatos[ , -1]
+rownames(metadata) <- metadatos$muestra
+
+```
+
+## _El análisis_.
+### **_La herramienta, DESeq_ :**
+`DESeq()` es una función del paquete **DESeq2** para **R**, es una función cuyo algoritmo realiza análisis de expresión diferencial con base en una distribución negativa binomial de conteos. Se utiiza este tipo de distribución dado que se toman como *input* archivos basados en conteos, mismos que no pueden tener una distribución normal (dado que son números positivos y enteros). El algoritmo utiliza el parámetro de varianza global de cada gen (lo interpreta a partir de las abundancias -conteos-), éste permite estimar de manera precisa la variación de los genes y determinar los de expresión alta o baja. Es este parámetro en el que se basa para modelar la distribución de cada gen, de este modo no se encuentran relacionadas la variación y la expresión y, por tanto, puede observarse la variación más acertada y con un estimado preciso del error asociado al modelo.
+
+### **_Preparar los datos_ :**
+El primer paso es generar un objeto de tipo *DESeqDataSet*, este almacena la información referente a los datos de *input* para el análisis **DE** (*differential expression*) a realizar con la función `DESeq()`. El objeto se genera con la función `DESeqDataSetFromMatrix()`, sus argumentos son: *countData*, *colData*, *design* y *tidy*. El primero corresponde a la matriz de la cual se obtendrá la información para el *dataset*, en este caso, el objeto *matrix_data*. El segundo corresponde a el *data.frame* del cual se extraerán los (meta)datos para llevar a cabo un proceso de modelado determinado en el tercer argumento; el valor de *colData*, en este caso, es el objeto *metadata*.
+El tercer argumento hace referencia al modelo conforme al cual se interarán los ensayos en `DESeq()`; el modelo se indica con "~" seguido de las variables a considerar, en este caso solamente se considera el efecto de la variable procedencia. Si el modelo a evaluar consta de más de una variable, éstas se agregan con el signo "+" y deben encontrasre todas en el objeto asignado a *colData*.
+Finalmente, el argumento *tidy* indica que el objeto generado tenga indicados nombres de renglones y un renglón indicando la clase de objeto d cada columna. Se indica como FALSE dado que esta información es innecesaria y lleva a error de ejecución en la función.
+
+```{r create DESeq object, echo=TRUE, message=FALSE, warning=FALSE, results='hide'}
+# Cargar la ibreria al entorno
+library(DESeq2, quietly = TRUE)
+
+# Generar el dataset de tipo DESeq:
+axd <- DESeqDataSetFromMatrix(countData = matrix_data, 
+                              colData = metadata,
+                              design = ~procedencia,
+                              tidy = F) #tidy=T dara error
+
+```
+
+### **_La condición de referencia y el análisis DE (differential expression)_ :**
+Es importante indicar cuál de las condiciones/tratamientos que se han indicado en el diseño del modelo para el análisis **DE** será la condición de referencia para el análisis de expresión diferencial. Si no se indica de manera manual, ya sea en el cálculo de resultados o previo a aplicar la función `DESeq()`, **R** toma como referencia al primer factor de la(s) variable(s) del modelo -en órden alfabético-. Para indicar la condición/factor de referencia previo a utilizar `DESeq()` se llama a la función `relevel()`; en su sintaxis, el primer argumento es la columna del *dataset* de tipo *DESeq* de la cual se extraerá el nombre de la condición referencia y el segundo es el nivel que será esta referenica (args. *ref=...*). En este caso, el primer argumento es la columna "*procedencia*" (variable de la que depende el modelado) y el segundo es el nivel/factor "*ileum*"; se utiliza este nivel dado que queremos evaluar cómo cambia la expresión a lo largo del tracto digestivo y las muestras provenientes del íleon serían las más cercanas al punto de inicio del tracto (en comparativa con las muestras de colon transverso y recto).
+
+Finalmente, se llama a la función `DESeq()` para realizar el análisis de expresión diferencial. Sus argumentos son el objeto a evaluar (*dataset* de tipo *DESeq*), el tipo de análisis a ejecutar (args. *test=...*) y, en este caso, el argumento *reduced* asociado al tipo de modelo a utilizar. En este caso, el valor del primer argumento es el objeto *axd*, el *dataset* de tipo *DESeq* creado con anterioridad. Para el segundo argumento se indica el valor "LRT" que corresponde a un análisis de *likelihood ratio*; se utiliza este tipo de análisis debido a que se cuenta con más de un nivel para la variable que correspnde al modelo del análisis. El *likelihood ratio test* o LRT examina dos modelos para comprobar hipótesis, genera el análisis tanto con un modelo reducido como con uno completo, posteriormente genera un ANODEV (análisis de devianza) para evaluar la diferencia entre ambos modelos y con esta información conocer el error asociado a la determinación de los valores de expresión diferencial. Se indica a *reduced* como 1 dado que en el modelo solo contamos con una variable, de ser un modelo con dos variables, *reduced* tendría el valor de la segunda variable a evaluar; utiliza "~" para indicarque es parte del modelo.
+En este *chunk* se mantienen los mensajes que envía la función dado que resultan útiles, nos indica en qué pasó del algoritmo va la función. Primero se calcula la varianza global y la dispersión de los datos, luego se procede a las inferencias y el ajuste de las dispersiones para, finalmente, ajustar el modelo e iterar el modelado.
+
+```{r DESeq analysis, echo=TRUE, results='hide'}
+# Indicar la condicion de referencia:
+axd$condition <- relevel(axd$procedencia, ref = "ileum")
+
+# Realizar el analisis:
+axdDE <- DESeq(axd, test="LRT", reduced=~1)
+
+```
+
+### **_Los resultados contrastados_.**
+
+**Visuaizarlos en tablas**
+Ya que se ha almacenado la información en el objeto *axdDE*, pueden obtenerse los resultados del análisis con la función `results()` (es de **DESeq2** también); en este caso, guardamos la información de los resultados en los objetos *CTvsI*, *RvsCT* e *IvsR*. Los argumentos de esta función son el objeto de clase *DESeq* generado con anterioridad (*axdDE*) y el contraste a realizar, para el contraste se indica la variable del modelo y sus factores a comparar. En este caso, a *contrast* pueden asignársele los valores *procedencia*, *ileum*, *recto* y *colon_T*; los valores a indicar dependerán de a cuál de las tres comparativas se busca acceder (p ej. *ileum vs. colon_T*, *recto vs. colon_T* e *ileum vs. recto*). La sintaxis es: (1) "procedencia" (de manera estrícta), (2) alguna de las tres comparativas, (p ej.) *ileum vs. colon_T* se indicaría como: *"procedencia", "ileum", "colonT"*; los valores en *contrast* se indican concatenados y en estructura de caracter, es decir, entrecomillados.
+
+Posteriormente, se genera el resumen de los resultados, esto para conocer de manera global qué ha arrojado el análisis de expresión diferencial en forma de una tabla informativa. Para ello se llama a la función `summary()` cuyo argumento llama a los resultados de un análisis con `DESeq()`, en este caso, los objetos *IvsCT*, *RvsCT* e *IvsR*. De modo que no se generen los *outputs* de la ejecución de `summary()` en esta sección, dado que no es aún la de resultados, se indica a `summary()`como comentario, pero, se explica su función en esta sección.
+
+```{r constrasted results, echo=TRUE, message=TRUE, results='FALSE'}
+## Ver las tablas de resultados de disntintas comparativas:
+
+#colonT_vs_ileum
+CTvsI <- results(axdDE, contrast=c("procedencia", "colonT", "ileum"))
+#summary(CTvsI) 
+
+#recto_vs_colonT
+RvsCT <- results(axdDE, contrast=c("procedencia", "recto", "colonT"))
+#summary(RvsCT)
+
+#ileum_vs_recto
+IvsR <- results(axdDE, contrast=c("procedencia", "ileum", "recto"))
+#summary(IvsR)
+
+```
+
+Finalmente, se puede ordenar a los resultados obtenidos, en este caso, se busca ordenarlos por su *valor ajustado de* **_p_**. Para ello, se llama a la función `order()` y se hace uso de corchetes; con `order()` podemos indicar el grupo o variable por el cuál ordenar a un conjunto, en este caso, la variable *padj* dentro de los objetos *CTvsI*, *RvsCT* e *IvsR* (se ordena de menor a mayor valor, los valor ajustados del estadístico **p** tienen significancia inversamente proporcional). Se indica espacio vacío en los corchetes para las columnas dado que se busca modificarlas todas conforme a los renglones ordenados y mantener la información asociada de manera correcta. Se sobreescriben los objetos de modo que pueda accederse a los datos ordenadas con el mismo objeto. 
+Se utiliza el *valor ajustado de * **_p_** dado que este parámetro ajustado es un buen indicador de genes diferencialmente expresados con una diferencia significativa estadísticamente. Este valor es utilizado cuando las muestras son muy grandes y/o se ha iterado varias veces un modelo; su valor es más acertado que el del estadístico "**p**" en este caso.
+En el código se especifica con la función `head()` para ver los primeros genes con este nuevo acomodo de los valores. Se indica primero el objeto del que se busca ver la información y a continuación en número de entradas que se busca ver. Se utilizan los corchetes de modo que pueda accederse solo a las columnas del valor de logFC y de **p** ajustado de los genes dado que es la información relevante en el caso del presente trabajo. Esta sección se evita que aparezca en el archivo PDF dado que esta no es la sección de resultados; se pude prevenir que aparezca el *output* si se envuelve este código en la función `invisible()`. La función `invisible()` no es para el análisis, es para prevenir que el *output* se vea antes de la sección de resulados.
+
+```{r most significant genes, echo=TRUE}
+## Ver los datos ordenados y modificar los archivos:
+
+#colonT_vs_ileum
+CTvsI <- CTvsI[order(CTvsI$padj),]
+invisible(head(CTvsI, 10)[, c("log2FoldChange", "padj")]) 
+#usar "head(CTvsI, 10)" para ver el resumen completo
+
+#recto_vs_colonT
+RvsCT <- RvsCT[order(RvsCT$padj),]
+invisible(head(RvsCT, 10)[, c("log2FoldChange", "padj")])
+#usar "head(RvsCT, 10)" para ver el resumen completo
+
+#ileum_vs_recto
+IvsR <- IvsR[order(IvsR$padj),]
+invisible(head(IvsR, 10)[, c("log2FoldChange", "padj")])
+#usar "head(IvsR, 10)" para ver el resumen completo
+
+```
+
+### **_Visuaizarlos en gráficos_ :**
+De modo que los resultados puedan verse de una manera más simple, se opta por realizar objetos que nos permitan ver los mismos de una manera gráfica. Se han elegido los gráficos de tipo **volcano plot** y **gráfico de puntos**, con el primero se espera conocer de manera global qué se ha encontrado al analizar las muestras y con la segunda se espera ver la variación a nivel individual de los genes entre los niveles de la variable en el modelo del análisis (*procedeencia*).
+
+### **Gráfico de puntos**
+Este tipo de grafico resulta útil dado que permite comprara de manera visual los cambios de expresión, en el gráfico podemos ver los conteos de un gen en específico. Dentro del gráfico tenemos representados por puntos a los conteos, los ejes del gráfico tenemos el valor de conteos normalizados (eje Y) y el nivel de la variable evaluado (eje X), en este caso, *ileum*, *recto* y *colon_T*. Con la información representada en el gráfico puede comprarse la cantidad de conteos del gen entre los distintos niveles, la información de la comparativa puede posteriormente compararse y evaluarse conforme a los resultados de el propio gen en el análisis de expresión diferencial.
+A continuación, se presenta detalladamente a cada una de estas funciones, definidas por el usuario, de las que se hace uso para ver los conteos de genes.
+
+**plotting() :**
+
+Esta es la funcipon auxiliar, su único argumento es "i" que nos permitirá iterarla en un ciclo dentro de la función `PC()`. La función `plotting()` tiene una sola acción en su cuerpo, llamar a la función `plotCounts()`; esta función permite ver en un grafico de puntos de los conteos normalizados del gen al que se llama en la función. Los argumentos de `plotCounts()` son: (1) el objeto en que tenemos la información del análisis de expresión diferencial, (2) el nombre del gen cuyos conteos queremos graficar y (3) *intgroup*, el grupo de interés, en este caso, la variable por la cual definimos el modelo del análisis.
+
+**PC() :**
+
+Esta es la función que nos permitirá generar los *plots* de un número de genes de interés de manera programática y automatizada. Su argumento es el objeto de resutados (*CTvsI*, *RvsCT* o *IvsR*) del cuál se extraerán los nombres de los genes cuyos *counts* quieren verse de manera gráfica. Esto de modo que pueda realizarse para distintos contrastes y de manera ordenada.
+Dado que la funcion auxiliar requiere del objeto *res_data*, parte de a funcipon `PC()` debe contener código que permita definir a este objeto como el objeto ingresado de *input* en la misma. De omitir este paso, la función `plotting()` no encontrará al objeto *res_data* y la función `PC()` arrojará ERROR como *output*. En el código se utiliza la asignación con "`<<-`" dado que al indicarla de este modo el objeto sí se creará en el entorno y la funcion auxiliar lo podrá encontrar.
+Antes de generar y ver los objetos que contengan la información del gráfico, se llama a la función `par()` para ajustar cómo serán presentados los gráficos en la pantalla (y el archivo PDF de este trabajo). El argumento dentro de la función es *mfrow*, permite indicar las dimensiones de una matriz, misma que será la forma en que se presenten los gráficos en el cuadro de *plots*; sus valores son dos, número de renglones y número de columnas (en este orden) por lo que se concatenan los valores correspondientes (en este caso, 2 renglones en 5 columnas). Se indica que los gráficos generados se acomoden en una matriz de gráficos que permita ver los conteos de cada gen de los primeros diez más significativos (por ello, el *display* se ajusta para 10, en dos renglones).
+A continuación, se indica un loop *for(i in vector)* que permite iterar la función `plotting()` (función auxiliar) para estos diez genes de mayor significancia estadística, se indica en la variable *times* qué genes quieren verse; en *times* se indica el listado de genes dentro de los objetos de resultados (*CTvsI*, *RvsCT*, *IvsR*) ordenados por *padj*. Con esta iteración de la funcipon auxiliar `plotting()` se generan y ven los *plots* de conteos de los genes especificados, mismos que serán discutidos delante.
+
+```{r creating functions to plot, echo=TRUE, fig.show='hide', message=FALSE, results='hide'}
+## Ver los conteos por gen, entre tratamientos:
+plotting <- function(i){
+  plotCounts(axdDE, gene = rownames(res_data)[i],
+             intgroup = "procedencia")
+}
+
+#todo junto ...
+times <- 1:10#que genes quieren verse
+PC <- function(DESeq_res){
+  res_data <<- DESeq_res
+  par(mfrow=c(2,5))
+  for(i in times){
+    plotting(i)
+  }
+}
+
+## Graficar de manera automatizada por cada objeto de los resultados:
+
+#colonT_vs_ileum
+PC(CTvsI)
+
+#recto_vs_colonT
+PC(RvsCT)
+
+#ileum_vs_recto
+PC(IvsR)
+
+```
+
+### **Volcano Plot**
+Para generar el volcano plot básico, utilizamos la función `with()` tomamos los objetos *CTvsI*, *RvsCT* y *IvsR* de los resultados, la función `plot()` para darle formato a la gráfica, el argumento de *x* toma los valores del log2FoldChange, el argumento *y* toma los valores de p transformado en log negativo base 10, el argumento *pch* define el formato cada punto, el argumento *main* le pone un título al gráfico y el argumento *xlim* delimita los valores de log2FoldChange para que el gráfico no se exceda de dimensiones donde ya no hay puntos graficados.  
+Utilizamos la función `with()`, pero agregamos el argumento *subset* que toma un subconjunto de datos, en este caso tomamos los valores de los genes de acuerdo a un valor de p ajustado de 0.01 para tomar los más significativos. 
+En un volcano plot, los genes más regulados están en el lado derecho,los genes menos regulados están en el lado izquierdo y los genes estadisticamente significativos están en la parte superior de ambos lados.
+
+*Contraste colon transverso vs íleon*
+```{r creating volcano plots: CTvsI, echo=TRUE, fig.show='hide', results='hide'}
+## Volcano plots
+par(mfrow=c(1,1)) #arejustar el display de los graficos a 1
+# Volcano plot basico
+with(CTvsI, plot(log2FoldChange, -log10(pvalue),
+               pch=20, main="Volcano plot (CTvsI)",
+               xlim=c(-3,3)))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange  
+with(subset(CTvsI , padj<.01 ),
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="blue"))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange mayor a el valor absoluto de 2
+with(subset(CTvsI , padj<.01 & abs(log2FoldChange)>2), 
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="red"))
+
+```
+
+*Contraste recto vs colon transverso*
+
+```{r creating volcano plots: RvsCT, echo=TRUE, fig.show='hide', results='hide'}
+## Volcano plots
+# Volcano plot basico
+with(RvsCT, plot(log2FoldChange, -log10(pvalue),
+               pch=20, main="Volcano plot (RvsCT)",
+               xlim=c(-3,3)))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange  
+with(subset(RvsCT , padj<.01 ),
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="blue"))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange mayor a el valor absoluto de 2
+with(subset(RvsCT , padj<.01 & abs(log2FoldChange)>2), 
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="red"))
+
+```
+
+*Contraste íleon vs recto*
+
+```{r creating volcano plots: IvsR, echo=TRUE, fig.show='hide', results='hide'}
+## Volcano plots
+# Volcano plot basico
+with(IvsR, plot(log2FoldChange, -log10(pvalue),
+               pch=20, main="Volcano plot (IvsR)",
+               xlim=c(-3,3)))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange 
+with(subset(IvsR , padj<.01 ),
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="blue"))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange mayor a el valor absoluto de 2
+with(subset(IvsR , padj<.01 & abs(log2FoldChange)>2), 
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="red"))
+
+```
+
+
+# Resultados y discusión
+
+## _Análisis de expresión diferencial_.
+Los resultados de este análisis incluyen desde las tablas de resumen estadístico hasta la interpretación de los gráficos generados. Esta sección será por tanto subdividida para presentar los resultados y su debida discusión.
+
+### **_Contraste colon transverso vs íleon_**
+**Resumen estadístico del análisis de expresión diferencial.**
+```{r CTvsI summary, echo=FALSE, message=FALSE, warning=FALSE}
+#colonT_vs_ileum
+CTvsI <- results(axdDE, contrast=c("procedencia", "colonT", "ileum"))
+summary(CTvsI) #ver el analisis resumido en una "tabla"
+
+```
+
+La información que esta tabla presenta es en relación al análisis de expresión diferencial; muestra un resumen propiamente de lo que se obtuvo con el análisis, información de manera global que resulta de interés. Primero, muestra el número de genes que no tiene un valor total de conteos (*counts*) igual a 0; hay genes que presentan un valor de 0 debido a que simplemente no se encontraron en la muestra, en este caso, un total de 14196 tenían valores de 0 (se evaluaron 55,766 genes). A continuación, se indica el valor corte del estadístico **p** ajustado, para este análisis fue menor a 0.1 para considerar como significativa la diferencia en la expresión.
+La información que se presenta después es el porcentaje de genes sobre- y subexpresados (2.8% y 1.1%, respectivamente) y la cantidad de genes comprendidos en este porcentaje. A esta información le sigue el porcentaje de *outliers* y el de genes con conteos bajos, esta información es relevante dado que nos permite tener una idea de si los resultados pueden estar sesgados por *outliers* o por genes pocoexpresados (conteo pequeño). Finalmente, se muestra el dato de el valor del promedio de conteos, en este caso, es mayor a 3.
+
+Como puede observarse, se tiene un porcentaje pequeño tanto de genes sobre-  como subexpresados. Esto puede deberse a que las muestras fueron tomadas de órganos que forman parte de un mismo sistema, por ello, existe variación dado que no son la misma zona , pero, es poca debido a que forman parte del mismo sistema. Esto puede fundamentarse también con el hecho de que la regulación global (hormonal, génica, etc) de el sistema digestivo es estricta dado el proceso que realizan los ´rganos que lo comprenden; posiblemente, esta relativamente poca diferencia puede deberse a la regulación tal cual del sistema. Ademas, estas dos zonas del tracto digestivo se encuentran cercanas, el íleon (que es la referencia) se encuentra al final del intestino delgado y es la conexión con el intestino grueso, mientras que el colon transverso es la segunda de tres partes del intestino grueso. Puede deberse a esta cercanía que los genes sean expresados de manera semejante y las diferencias sean pequeñas (pero significativas).
+Otra hipótesis es que puede deberse al pequeño número de muestras y esta variación podría estar explicada por los pocos datos con los que s generó a comparativa en el análisis.
+
+
+**Datos de los 10 genes con expresión diferencial más significativa.**
+```{r CTvsI top10, echo=FALSE, message=FALSE, warning=FALSE}
+#colonT_vs_ileum
+CTvsI <- CTvsI[order(CTvsI$padj),]
+head(CTvsI, 10)[, c("log2FoldChange", "padj")] 
+
+```
+Puede observarse que los valores de logFC son pequeños, como se ha discutido anteriormente, eso puede deberse a la unbicación de los órganos de los cuales se tomaron las muestras y del heecho de que forman parte del mismo sistema. Esta poca variación de los genes en general puede ser un indicativo de ello. El valor de mayor cambio es el del gen FAM83A, éste se subexpresa en en colon transverso con relación a su expresión en el íleon; el gen que menor valor de cambio tiene es CXCL10, de igual modo éste se encuentra subexpresado. El TRPM5 es el gen que tiene el mayor logFC de sobreexpresión y el gen TMPRSS3 es el que menor valor de logFC.
+
+
+### **_Contraste recto vs colon transverso_**
+**Resumen estadístico del análisis de expresión diferencial.**
+```{r RvsCT summary, echo=FALSE, message=FALSE, warning=FALSE}
+#recto_vs_colonT
+RvsCT <- results(axdDE, contrast=c("procedencia", "recto", "colonT"))
+summary(RvsCT) #ver el analisis resumido en una "tabla"
+
+```
+
+Esta tabla del resumen estadístico del análisis de expreisión diferencial presenta la misma información que la del contraste anterior. En este caso, la información que podemos extraer es: los mismos 14196 genes con conteos de 0 (lo cual hace sentido dado que se evaluaron los mismos genes entre muestras), el mismo valor de corte de **p** ajustado (dado que es el defalut), un porcentaje de 2.9% de genes sobrexpresados y 1% de subexpresados, las mismas cantidades de *outliers* y genes con conteos bajos ( lo cual, nuevamente, hace sentido dado que se evaluaron los mismos genes) y, finalmente, un promedio de conteos aún mayor a 3. Nuevamente, la cantidad de genes con expresión diferencial (ya sea sub- o sobrexpresión) es poca y se sugiere que esto se deba a que forman parte del mismo sistema.
+
+
+**Datos de los 10 genes con expresión diferencial más significativa.**
+```{r RvsCT top10, echo=FALSE, message=FALSE, warning=FALSE}
+#recto_vs_colonT
+RvsCT <- RvsCT[order(RvsCT$padj),]
+head(RvsCT, 10)[, c("log2FoldChange", "padj")]
+
+```
+En este caso, hay mayor cantidad de genes sobreexpresados que subexpresados. La variación es tal que los valores de expresión son mucho mayores que en el contraste previo; el aumento no es menor a 2 y el mayor cambio es de aproximadamente 42FC (gen CXCL10). El gen subexpresado (TRMP5) tiene un valor de aproximadamente 6FC y es el único que se encuentra con menor expresión en el recto con relación al colon transverso. El hecho de que la exppresión de los genes CXCL10 y TRMP5 sea contraria en el colon respecto al recto llama la atención, estos dos genes tienen expresión diferencial tanto en el contraste anterior como en este y el tipo de expresión (sobre- o subexpresión) es contraria entre ellos. Esto puede indicar que existe regulación de una red en que participan estos genes, tan es así que su expresión diferencial con ambos contrastes es significativa.
+
+### **_Contraste íleon vs recto_**
+**Resumen estadístico del análisis de expresión diferencial.**
+```{r IvsR summary, echo=FALSE, message=FALSE, warning=FALSE}
+#ileum_vs_recto
+IvsR <- results(axdDE, contrast=c("procedencia", "ileum", "recto"))
+summary(IvsR) #ver el analisis resumido en una "tabla"
+
+```
+
+La tabla presenta la misma información que las de los contrastes anteriores. En este caso, la información que podemos extraer es: los mismos 14196 genes con conteos de 0, el mismo valor de corte de **p** ajustado (defalut), un porcentaje de 0.9% de genes sobrexpresados y 3% de subexpresados, las mismas cantidades de *outliers* y genes con conteos bajos y, finalmente, un promedio de conteos aún mayor a 3. Nuevamente, los valores de porcentajde de expresión diferencial son relativamente bajos, lo cual puede apoyar las hipótesis ya mencionadas. En este caso, se observa una mayor cantidad de genes subexpresados, lo que puede deberse a una regulación entre los genes involucrados en los procesos que llevan a cabo el íleon y el recto; además, esta diferencia de expresión puede verse dramáticamente en este contraste (en relación a los dos previos) por la lejanía de estos órganos en el sistema digestivo de *H. sapiens*. Esto último puede fundamentar la hipótesis de que los porcentajes pequeños se deben a a que forman parte del mismo sistema y son significativos debido al cambio pequeño y controlado de una regulación génica a lo largo de este sistema.
+
+
+**Datos de los 10 genes con expresión diferencial más significativa.**
+```{r IvsR top10, echo=FALSE, message=FALSE, warning=FALSE}
+#ileum_vs_recto
+IvsR <- IvsR[order(IvsR$padj),]
+head(IvsR, 10)[, c("log2FoldChange", "padj")]
+
+```
+En este contraste los genes tienen valores de cambio (logFC) mayores que en el primer contraste (colon transverso vs íleon), pero, se encuentran en un rango menor que el ensayo previo (contraste recto vs colon transverso). Sus valores de FC llegan a ser menores a 2 y su valor máximo es aproximadamente 38FC. En este caso, hay más genes con subexpresión que con sobreexpresión, esto puede deberse a que los órganos de los que provienen la muestra se encuentran alejados en el tracto digestivo, entre nuestras muestras éstos provienen de los órganos más alejados (íleon y recto) mismos que representaron el inicio y fín del tracto. De igual modo, puede deberse a esto que los valores de expresión diferencial sean tan grandes.
+Nuevamente, el gen TRPM5 tiene un tipo de expresión distinto al resto; es el único gen con sobrexpresión en el íleon respecto a su expresión en colon. Cabe mencionar que el gen CXCL10 se encuentra nuevamente dentro de los que tienen un mayor grado de expresión diferencial, de hecho, es el gen con mayor valor de logFC (FC de aproximadamente 38). Esta información sobre los genes TRPM5 y CXCL10 sustentan la hipótesis de que pueden formar parte de una red de regulación, dados los cambios donde en íleon y colon transverso el gen TRPM5 tiene una mayor expresión en relación al recto y los cambios donde el gen CXCL10 se encuentra subexpresado. Inclusive podría tratarse de genes relevantes en el proceso de digestion dado que se encuentran expresados de manera contraria, significativa y con una tasa de cambio relativamente alta entre los intestinos (íleon: intestino delgado, colon transverso: intestino grueso) y el recto.
+
+
+## **Visualización gráfica de los resultados.**
+### **_Volcano plot_ .**
+**Contraste colon transverso vs íleon**
+
+```{r CTvsI vocano plot, echo=FALSE, message=FALSE, warning=FALSE}
+# Volcano plot basico
+par(mfrow=c(1,1)) #arejustar el display de los graficos a 1
+# Volcano plot basico
+with(CTvsI, plot(log2FoldChange, -log10(pvalue),
+               pch=20, main="Volcano plot (CTvsI)",
+               xlim=c(-3,3)))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange  
+with(subset(CTvsI , padj<.01 ),
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="blue"))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange mayor a el valor absoluto de 2
+with(subset(CTvsI , padj<.01 & abs(log2FoldChange)>2), 
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="red"))
+
+```
+
+
+**Contraste recto vs colon transverso**
+
+```{r RvsCT vocano plot, echo=FALSE, message=FALSE, warning=FALSE}
+# Volcano plot basico
+with(RvsCT, plot(log2FoldChange, -log10(pvalue),
+               pch=20, main="Volcano plot (RvsCT)",
+               xlim=c(-3,3)))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange  
+with(subset(RvsCT , padj<.01 ),
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="blue"))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange mayor a el valor absoluto de 2
+with(subset(RvsCT , padj<.01 & abs(log2FoldChange)>2), 
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="red"))
+
+```
+
+
+**Contraste íleon vs recto**
+
+```{r CvsR volcano plot, echo=FALSE, message=FALSE, warning=FALSE}
+## Volcano plot basico
+with(IvsR, plot(log2FoldChange, -log10(pvalue),
+               pch=20, main="Volcano plot (IvsR)",
+               xlim=c(-3,3)))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange 
+with(subset(IvsR , padj<.01 ),
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="blue"))
+
+# Agregamos formato de colores conforme a los valores de
+#p y FoldChange mayor a el valor absoluto de 2
+with(subset(IvsR , padj<.01 & abs(log2FoldChange)>2), 
+     points(log2FoldChange, -log10(pvalue),
+            pch=20, col="red"))
+
+```
+
+
+Puede observarse que hay gran cantidad de genes con sub- y sobreexpresión en los tres contrastes, como lo muestran los valores de logFC, pero, solo una pequeña cantidad de éstos tienen una expresión diferencial significativa (marcados en azul) cuando se evalúa con un valor de **p** ajustado igual a 0.01. Cabe mencionar que los genes que se encuentran en valores de logFC cercanas a cero (0) no son considerados significativos. Lo que podemos observar en este gráfico va acorde a los valores relativamente pequeños del porcentaje de genes con sobre- y subexpresión (donde los porentajes entre los contrastes no tiene valores mayores a 3% y el menor valor es menor que 1%) en cualquiera de los contrastes realizados, mismos que sumados tienen un porcentaje de 3.9% de expresión diferencial en todos los casos. Este porcentaje tope de cada evaluación puede verse refejado en los volcano plots presentados.
+Como se ha mencionado con anterioridad, esto, se cree, puede deberse ya sea al pequeño número de muestras evaluadas o al hecho de que las zonas evaluadas pertenecen a un mismo sistema y éste se encuentra estrictamente regulado.
+
+
+### **_Gráfica de puntos, conteos_ .**
+```{r Counts plot (3), message=FALSE, warning=FALSE, , echo=FALSE}
+#colonT_vs_ileum
+PC(CTvsI)
+
+```
+
+Como se ha discutido anteriormente, el análisis ha calculado a los mismos diez genes como los más significativos para las tres combinaciones, pero, los valores de logFC (*log2 fold change*) entre contrastes varían de manera notoria. Al utilizar la función `PC()` con cualquiera de los contrastes se obtiene el mismo *plot* debido a que son los mismos 10 genes evaluados.
+Con los *plots* de conteos obtenidos, se sustenata la discusión comentada anteriormente, los datos obtenidos en las tablas de resultados del análisis de expresión diferencial son concordantes con la visualización de conteos; para el caso del contraste *íleon vs. colon transverso* podemos ver que los conteos no se ven alejados en el plot y esto concerda con los valores pequeños de logFC calculados, a pesar de ser significativos, la diferencia no es grande entre la expresión de estos genes en ambos niveles del tracto digestivo. Para el caso del contraste *recto vs. colon transverso*, nuevamente el plot concuerda con los resultados obtenidos dado que se ve una mayor diferencia entre los puntos y esto representa a los valores altos de logFC calculados; es el mismo caso para el contraste *íleon vs recto*.
+
+
+## EXTRA: _Dinámica de redes de microbiota_.
+l repositorio del cuál se hizo uso en el presente trabajo no cuenta con los archivos necesarios para realizar esta sección del proyecto y nos encontramos fuera de posibilidad de realizar un muestreo por cuenta propia; la relación que se buscaba evaluar no podrá evaluarse en este momento, mas, puede generarse un código funcional para hacerlo posteriormente..
+Se realizará el ejercicio de crear una red microbiana a partir de archivos de abundancias, mismo que esperamos poder realizar posteriormente en relación a este proyecto. El análisis aquí realizado no tiene relación alguna con el análisis previamente presentado, no existe relación entre las muestras y por tanto no es parte de él. Es por esta razón que se denomina como “extra” en el proyecto. Nos basamos en el trabajo de Alcala & Poudel (2018). 
+
+### **_Los datos:_ **
+No se tomaron los datos analizados anteriormente en el proyecto, en cambio, se evaluaron los datos presentados por Alcala & Poudel (2018) del microbioma de una planta. Con estos datos, las interacciones no se deben solo al mecanismo de protección, se considera sino también el campo en donde se encuentra la planta, el(los) patogeno(s) y los microorganismos que benefician directamente e indirectamente. En el tutorial en que se encuentra basada esta sección del proyecto se proporcionan dos archivos, datos de abundancia y metadatos; el archivo que contiene los datos de abundancia cuenta con la estructura: son abundancias de OTUs en diferentes muestras, en las columnas se encuentran los OTUs y en los renglones las muestras. En el archivo de metadatos se encuentra la información taxonómica de cada OTU en las columnas del archivo de abundancias. Los archivos corresponden a información de abundancia de OTUs en determinadas muestras (*otudata.csv*) y la información taxonómica de los OTUs (*otu_taxonomy.csv*) prsentada en el tutorial citado. 
+
+### **_El código:_ **
+Este código no será explicado a nivel profundo como lo fue el código del proyecto. Se prsentará un listado de notas referentes a el código y se muestran comentarios dentro del *chunk* que permitan seguir el código.
+
+* Se utiliza la librería **Hmisc** para calcular la matriz de correlación, se utiliza la función `rcorr()` de este paquete. La ventaja de utilizar esta función es que tenemos un archivo de tipo arreglo o lista que permite filtrar la información de las correlaciones de modo que se utilicen solo datos relevantes (correlaciones altas, valor significativo del estadístico **p**, valores diferentes a NA, etc.).
+
+* Se utiliza la librería **igraph** para generar el gráfico de la red y poder hacerle personalizaciones. En el presente trabajo, la personalización realizada solo fue la asignación de *tags* a los nodos; como se sugiere delante, podría realizarse una personalización por color para obtener información nueva sobre los nodos o de algún nodo en especial.
+
+* Se utiliza la librería **Matrix** para manipular el conjunto grande de datos, se utiliza la función `forceSymmetric()` de este paquete. Este paquete permite manejar matrices de datos de dimensiones grandes, es útil para este tipo de datos dado que se itera variedad de veces sobre los mismos y se cuenta con grandes cantidades de información; el uso de esta librería evita que la sesión de **RStudio** colapse debido a la capacidad de procesamiento del ordenador.
+
+* Se genera la matriz con un formato de tipo lista o arreglo, no es un objeto simple de tipo matrix. La información tanto de los datos ingresados como de las propias correlaciones se encuentra en diferentes niveles de este arreglo. Los niveles de la lista son los valores de los estadísticos **r** (coeficiente de Pearson) y **p**, y el numero de muestras (nivel **n**).
+- El código, en su mayoría, corresponde a un filtrado de datos. El primer filtro corresponde a la eliminación de OTUs que tengan pocos *counts*, se especifica que sea un número de counts mayor o igual a 10 de modo que no sean sesgados los datos.
+
+* Los datos no son como tal modificaciones del *array* de la matriz de correlaciones, se filtra información de este array y se almacena en nuevos objetos. Solo se hace un filtrado de la informacipon taxonómica, mismo que se almacena en el objeto *ft_metadata*; no es una modificación del *array*, este objeto contiene información modificada del archivo de metadatos y conserva su clase y estructura (debido al argumento *drop* con valor FALSE).
+- El *subscripting* funciona como un clase de subset, cada nuevo objeto guarda la información que cumple las condiciones especificadas en el código que se indica o al que se accede en cada caso, es vía *subscripting* que puede hacerse el fiktrado simple o por condiciones conjuntas (p ej. acceder a datos que tengan un valor específico de **r** *y* un valor específico de **p**). Como tal se accede a subniveles del *array* de la matriz, no a todo él. El *array* se modifica vía el *subscrpiting* especificado, lo que permite utilizar sólo los datos que se consideren apropiadas para el análisis.
+
+```{r network packages, eval=FALSE, message=FALSE, warning=FALSE, results='hide'}
+## REDES DE MICROBIOTA ##
+# Instalar los paquetes necesarios:
+install.packages("igraph")
+install.packages("Hmisc")
+install.packages("Matrix")
+
+#si no cuentas con estos paquetes cambia "eval=TRUE"
+```
+
+```{r create and filter network data, message=FALSE, warning=FALSE, results='hide'}
+## Cargar las librerias necesarias:
+library(igraph, quietly = TRUE)
+library(Hmisc, quietly = TRUE)
+library(Matrix, quietly = TRUE)
+
+## Cargar los archvos a la sesion desde el ordeandor:
+#Archivo "outdata.csv" ...
+datos_otus <- read.csv(file.choose(), header=T, row.names = 1) 
+#Archivo "otu_taxonomy.csv" ...
+metadatos_taxa <-read.csv(file.choose(),header=T, row.names = 1)
+
+## Filtrar los datos:
+#NOTA: eliminae la columna donde se tienen caracteres, evitas ERROR
+#¡solo debe haber valores numericos!
+datos_otus$X1=NULL
+datos_otus <- datos_otus[ ,colSums(datos_otus) >= 10]
+
+## Generar la matriz de correlaciones:
+cor_data <- rcorr(as.matrix(datos_otus), type="spearman") #objeto de tipo list/array
+
+# Almacenar y filtrar la informacion en relacion al p-value:
+#Se almacenan las entradas/columnas que cumplen con lo que evalua el codigo
+#"forceSymmetric()" define como NA a todas las "auto-correlaciones"
+p_valued <- forceSymmetric(cor_data$P) 
+
+# Extraer los metadatos de las muestras filtradas por p-value:
+#Almacenar toda la informacion de los OTUs almacenados en "p_valued".
+ft_metadata <- metadatos_taxa[rownames(p_valued), , drop = FALSE]
+
+## Ajustar los datos:
+#Almacenar los OTUs (columnas) que cumplen la condicion asignada.
+vcP <- p_valued<0.05 #indicar el valor corte para el subscripting por p-value
+
+#Almacenar los OTUs que pasaron los filtros, y tomar la lista de valores
+#del estadistico R para esas columnas.
+r_vals <- cor_data$r
+
+#Almacenar los OTUs que cumplan las condiciones del subscripting en el objeto "r_vals".
+cRP <- r_vals*vcP
+
+#Almacenar los OTUs que cumplan con la condicion: correlacion mas alta que el 75%.
+cRP <- abs(cRP)>0.75 #indicar el valor corte para el subscripting por correlacion
+finale <- cRP*r_vals #hacer el subscripting y almacenar los datos filtrados
+
+## Generar la matriz de adyacencias:
+# Guardar el objeto como matriz en "matx"
+matx <- as.matrix(finale)
+
+# Renombrar columnas conforme a la informacion taxonomica almacenada en "ft_metadata"
+colnames(matx) <- as.vector(ft_metadata$Family)
+rownames(matx) <- as.vector(ft_metadata$Family)
+
+```
+
+
+### **_Gráfico de la red en igraph._ **
+Una vez generado la matriz de adyacencia y haber eliminado las otus que no cumplen con ciertas condiciones de correlación, cargamos la libreria *igraph* para usar la función *graph_from_adjacency_matrix* para generar un grafo una red a partir de una matriz de adyacencia, usamos el objeto *matx* como matriz de adyacencia, utilizamos los argumentos *mode* para definir si las interacciones tienen dirección, en este caso se hizo no dirigida porque no queremos generar ambigüedad, el argumento *weighted* determina si tienen peso las interacciones, por lo tanto se calcularon las correlaciones para darle peso a la interacciones y el argumento *diag* es extraer la diagonal de la matriz de adyacencia, no se extrajó para evitar errores. 
+Con la función *plot* graficamos el objeto *NTWR* tipo igraph, le podemos agregar más argumentos para poner más detalles al gráfico, como *vertex.label* le pone etiquetas a los puntos de la red y *size.font.label* determina el tamaño de la fuente de la etiqueta.
+Para evitar otliers en la red, seleccionamos con *V* los puntos o nodos del objeto *NTWR*, con las llaves *[ ]* donde subtrajemos los nodos con degree valor a cero y están alojados en el objeto *non_connected* . Por último, modificamos el objeto *NTWR* usando la función *delete.vertices* para eliminar los nodos que su degree es cero.
+
+```{r create and adjust network, message=FALSE, warning=TRUE, results='hide'}
+## Crear el objeto igraph:
+#NOTA: diagonal=FALSE para evitar errores,la diagonal es NA
+NTWR <- graph_from_adjacency_matrix(matx, mode="undirected",
+                            weighted = TRUE, diag = FALSE) 
+
+
+# Eliminar los nodos que no esten conectados:
+#Encontrar y almacenar el index los nodos
+non_connected <- V(NTWR)[degree(NTWR) == 0] 
+NTWR <- delete.vertices(NTWR, non_connected) #eliminarlos 
+
+```
+
+
+### **_Resultados y discusión:_ **
+A continuación, presentamos el gráfico de la red. Se realiza sin los nombres asignados con la información taxonómica, de dejarlos el gráfico es totalmente incomrensible. Los datos se encuentran en los obetos, por tanto, si un grupo taxonómico es de relevancia especial para un estudio o por cusriosidad, se puede ver gráficamente la información vía algún color de nodo o conexión (p.ej.).
+
+```{r plot network, message=FALSE, warning=FALSE}
+## Ver el gráfico de la red:
+par(mfrow=c(1,2)) #para ver los graficos juntos
+# Con los datos de taxonomia
+plot(NTWR, vertex.label=metadatos_taxa$Family, size.font.label =0.1)
+
+# Sin los datos de taxonomia y sin formato
+plot(NTWR, vertex.label= NA)
+
+```
+
+La red entre OTUs sin ninunga cluterización nos permite observar que la red probablemnte se encuentra agrupada en dos *clusters*, uno que se observa relativamente más grande que el otro; mediante el uso de adecuado de otra función, una que permita realizar análisis de clusterización, podrrían probablemente observarse estos clusters y con una correcta asignación de etiquetas taxonómicas podrían definirse las relaciones entre estos nodos y como tal su agrupación. 
+
+
+
+# Conclusiones
+Con base en la información de análisis de expresión diferencial obtenida en el presente trabajo podemos argumentar que el hecho de que los genes más relevantes en análisis sean los mismos en los tres contrastes puede indicar que existe regulación de éstos de manera “específica” en el tracto digestivo y por ello sus fluctuaciones de expresión son las más relevantes de manera persistente entre modelos. Sugerimos que existe una relación de regulación entre estos genes que podría deberse a que forman parte de una misma red dentro del sistema digestivo de *H. sapiens*. A pesar de ser los mismos genes los que se encuentran con diferencia significativa, la expresión es distinta (sub- o sobreexpresión) entre pares de zonas, lo cual sustenta la idea de que puede existir una red de regulación de estos genes. A pesar de no poder realizar la asociación entre la microbiota de los sujetos de estudio y los resultados del análisis, mediante la comparación en la expresión entre niveles (órganos) del sistema digestivo, su homogeneidad o heterogeneidad, presumimos que puede depender de la función del mismo y qué tan expuesto ha estado a los diferentes microorganismos que componen a la  microbiota. 
+
+## **Para un futuro ...**
+Dados los resultados obtenidos, creemos posible un análisis de ontología de genes que pueda darnos más información y permita descartar o aprobar la hipótesis aquí planteada, que estos genes con mayor significancia estadística forman parte de una red de regulación génica en *H. sapiens*. Puede utilizarse este código con otros conjuntos de genes (con expresión diferencial significativa) y descartar nuestra hipótesis de porqué son los mismos genes. Esperamos que un futuro puedan realizarse el modelado de redes para la microbiota con muestras nuevas que sí coincidan con las que se utilizaron del hospedero.
+
+
+
+# Bibliografía y referencias
+### Bibliografia
+
+1. Ashlock, L. (1999) *DESEQ2 R Tutorial*. Recuperado en 26/05/2021 [05:56 pm], de GitHub:
+[https://lashlock.github.io/compbio/R_presentation.html](https://lashlock.github.io/compbio/R_presentation.html)
+
+2. Love, M. I., Anders, M. & Huber, W. (2021) *Analyzing RNA-seq data with DESeq2*. Recuperado en 26/05/2021 [06:01 pm], de Bioconductor.org:
+[http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#multi-factor-designs](http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#multi-factor-designs)
+
+3. Bridges, D. (2015) *Why do we use the negative binomial distribution for analysing RNAseq data?* Recuperado en 26/05/2021 [06:04 pm], de Bridges Lab: 
+[http://bridgeslab.sph.umich.edu/posts/why-do-we-use-the-negative-binomial-distribution-for-rnaseq](http://bridgeslab.sph.umich.edu/posts/why-do-we-use-the-negative-binomial-distribution-for-rnaseq)
+
+4. Harvard Chan Bioinformatics Core (HBC). (2020) [mod.] mayo 2021. *Introduction to DGE*. Recuperado en 26/05/2021 [06:11 pm], de HarvardX: 
+[https://hbctraining.github.io/DGE_workshop_salmon_online/lessons/01c_RNAseq_count_distribution.html](https://hbctraining.github.io/DGE_workshop_salmon_online/lessons/01c_RNAseq_count_distribution.html)
+
+5. Harvard Chan Bioinformatics Core (HBC). (2017) [mod.] marzo 2021. *Introduction to DGE - ARCHIVED*. Recuperado en 26/05/2021 [06:14 pm], de HarvardX:
+[https://hbctraining.github.io/DGE_workshop/lessons/05_DGE_DESeq2_analysis2.html](https://hbctraining.github.io/DGE_workshop/lessons/05_DGE_DESeq2_analysis2.html)
+
+6. Wang, H. y Pepin, M. (noviembre, 2018). *How to interpret results of DESeq2 with more than two experimental groups?*, Wang, H. [question], Pepin, M. [answer chains]. Recuperado en 26/05/2021 [06:20 pm], de ResearchGate:
+[https://www.researchgate.net/post/How-to-interpret-results-of-DESeq2-with-more-than-two-experimental-groups](https://www.researchgate.net/post/How-to-interpret-results-of-DESeq2-with-more-than-two-experimental-groups)
+
+### Referencias
+1. Alcala & Poudel (julio, 2018) *Microbiome Network*. Recuperado en 26/05/2021 [08:49 pm], de GitHub:
+[https://kelseyandersen.github.io/NetworksPlantPathology/Microbiome_network_ICPP2018_v2.html](https://kelseyandersen.github.io/NetworksPlantPathology/Microbiome_network_ICPP2018_v2.html)
+
+2. Marchesi, J. R., & Ravel, J. (2015) *The vocabulary of microbiome research: a proposal*. Microbiome, 3, PP. 31. doi: https://doi.org/10.1186/s40168-015-0094-5
+
+3. Thomas, S.*et. al* (2017) *The Host Microbiome Regulates and Maintains Human Health: A Primer and Perspective for Non-Microbiologists*. Cancer research, 77(8), pp. 1783–1812. doi: https://doi.org/10.1158/0008-5472.CAN-16-2929
+
